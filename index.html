@@ -1367,22 +1367,23 @@ function renderWizStep(){
     const f = wizState.flight, rf = wizState.returnFlight;
     const total = Number(f.price) + (rf ? Number(rf.price) : 0);
     body.innerHTML = `
-      <div class="step-label">${t('w6_label')}</div>
-      <h2>${t('w6_title')}</h2>
-      <div class="disclaimer-bar" style="margin-bottom:18px;">ℹ️ <span>${t('w6_demo')}</span></div>
+      <div class="step-label">${LANG==='fr'?'Confirmation':'Confirmation'}</div>
+      <h2>${LANG==='fr'?'Finaliser la réservation':'Finalize the booking'}</h2>
+      <div class="disclaimer-bar" style="margin-bottom:18px;">ℹ️ <span>${LANG==='fr'
+        ? "Le paiement en ligne n'est pas encore activé sur ce site. Cette réservation crée un vrai PNR chez la compagnie (mode « hold », sans paiement). L'accès est temporairement limité par un code."
+        : "Online payment isn't enabled on this site yet. This booking creates a real airline PNR (“hold” mode, no payment). Access is temporarily restricted by a code."}</span></div>
       <div class="form-grid">
-        <div class="field-block full"><label>${t('w6_name')}</label><input type="text" id="pName" value="${wizState.firstName} ${wizState.lastName}"></div>
-        <div class="field-block full"><label>${t('w6_card')}</label><input type="text" placeholder="4242 4242 4242 4242" maxlength="19"></div>
-        <div class="field-block"><label>${t('w6_exp')}</label><input type="text" placeholder="MM/AA" maxlength="5"></div>
-        <div class="field-block"><label>${t('w6_cvc')}</label><input type="text" placeholder="123" maxlength="3"></div>
+        <div class="field-block full"><label>${LANG==='fr'?"Code d'accès":'Access code'}</label>
+          <input type="password" id="fAccessCode" placeholder="••••••••" autocomplete="off"></div>
       </div>
       <div class="wizard-nav">
         <button class="btn btn-outline" id="wizBack">${t('nav_back')}</button>
-        <button class="btn btn-primary" id="wizPay">${t('w6_pay')} — ${total.toFixed(2)} ${f.currency || '€'}</button>
+        <button class="btn btn-primary" id="wizPay">${LANG==='fr'?'Confirmer la réservation':'Confirm booking'} — ${total.toFixed(2)} ${f.currency || '€'}</button>
       </div>
     `;
     document.getElementById('wizBack').onclick = ()=>{ wizState.step=5; renderWizStep(); };
     document.getElementById('wizPay').onclick = async ()=>{
+      const accessCode = document.getElementById('fAccessCode').value;
       const btn = document.getElementById('wizPay');
       const original = btn.textContent;
       btn.disabled = true;
@@ -1399,6 +1400,7 @@ function renderWizStep(){
             phone: wizState.whatsapp,
             birthDate: wizState.birthDate,
             gender: wizState.gender,
+            accessCode,
           }),
         });
         const data = await res.json();
