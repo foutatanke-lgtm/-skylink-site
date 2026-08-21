@@ -1402,7 +1402,11 @@ function renderWizStep(){
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.message || data.error || 'booking_failed');
+        if (!res.ok) {
+          const e = new Error(data.message || data.error || 'booking_failed');
+          e.code = data.error;
+          throw e;
+        }
         return data;
       }
 
@@ -1436,7 +1440,10 @@ function renderWizStep(){
             booking.returnAirlineLogo = rf.airlineLogo; booking.returnCheckedBags = rf.checkedBags; booking.returnCabinBags = rf.cabinBags;
           } catch (returnErr) {
             console.error('Erreur réservation vol retour :', returnErr);
-            toast(LANG==='fr' ? 'Vol aller réservé, mais le vol retour a échoué. Contactez le support.' : 'Outbound booked, but the return flight failed. Please contact support.');
+            const msg = returnErr.code === 'offer_not_bookable'
+              ? (LANG==='fr' ? "Vol aller réservé. Le vol retour choisi n'est pas disponible sans paiement immédiat — contactez le support pour en choisir un autre." : "Outbound booked. The chosen return flight isn't available without immediate payment — contact support to pick another one.")
+              : (LANG==='fr' ? 'Vol aller réservé, mais le vol retour a échoué. Contactez le support.' : 'Outbound booked, but the return flight failed. Please contact support.');
+            toast(msg);
           }
         }
 
@@ -1446,7 +1453,19 @@ function renderWizStep(){
         wizState.step=7; renderWizStep();
       } catch (err) {
         console.error('Erreur création de réservation :', err);
-        toast(LANG==='fr' ? 'La réservation a échoué. Vérifiez que le backend tourne et que l\'offre est encore valide.' : 'Booking failed. Check that the backend is running and the offer is still valid.');
+        if (err.code === 'offer_not_bookable') {
+          // Ce vol précis n'est pas réservable sans paiement immédiat : on renvoie
+          // l'utilisateur choisir un autre vol, en retirant celui-ci de la liste.
+          toast(err.message);
+          currentFlightOptions = currentFlightOptions.filter(o => o.offerId !== f.offerId);
+          wizState.flight = null;
+          wizState.tripPhase = 'outbound';
+          wizState.step = 4;
+          renderWizStep();
+          return;
+        }
+        const known = err.message && err.message !== 'booking_failed';
+        toast(known ? err.message : (LANG==='fr' ? 'La réservation a échoué. Vérifiez que le backend tourne et que l\'offre est encore valide.' : 'Booking failed. Check that the backend is running and the offer is still valid.'));
       } finally {
         btn.disabled = false;
         btn.textContent = original;
