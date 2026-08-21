@@ -1591,7 +1591,7 @@ async function generatePdf(b){
 
   /* ---- petites icônes vectorielles (les polices PDF standard ne supportent pas les emoji) ---- */
   const drawCheck = (cx,cy,color)=>{ doc.setDrawColor(...color); doc.setLineWidth(1.4); doc.line(cx-4,cy,cx-1,cy+3.5); doc.line(cx-1,cy+3.5,cx+5,cy-4); };
-  const drawBagIcon = (cx,cy,color)=>{ doc.setDrawColor(...color); doc.setLineWidth(1.1); doc.roundedRect(cx-6,cy-5,12,10,1.5,1.5,'S'); doc.roundedRect(cx-2.5,cy-8,5,3.5,1,1,'S'); };
+  const drawBagIcon = (cx,cy,s,color)=>{ doc.setDrawColor(...color); doc.setLineWidth(1.1); doc.roundedRect(cx-s*0.5,cy-s*0.42,s,s*0.83,s*0.12,s*0.12,'S'); doc.roundedRect(cx-s*0.21,cy-s*0.67,s*0.42,s*0.29,s*0.08,s*0.08,'S'); };
   const drawPin = (cx,cy,s,color)=>{ doc.setFillColor(...color); doc.circle(cx,cy-s*0.12,s*0.5,'F'); doc.triangle(cx-s*0.32,cy-s*0.02,cx+s*0.32,cy-s*0.02,cx,cy+s*0.55,'F'); doc.setFillColor(255,255,255); doc.circle(cx,cy-s*0.12,s*0.2,'F'); };
   const drawPhone = (cx,cy,s,color)=>{ doc.setDrawColor(...color); doc.setLineWidth(1.2); doc.roundedRect(cx-s*0.28,cy-s*0.5,s*0.56,s,s*0.14,s*0.14,'S'); };
   const drawEnvelope = (cx,cy,s,color)=>{ doc.setDrawColor(...color); doc.setLineWidth(1); doc.roundedRect(cx-s*0.5,cy-s*0.32,s,s*0.64,1.5,1.5,'S'); doc.line(cx-s*0.5,cy-s*0.32,cx,cy+s*0.05); doc.line(cx+s*0.5,cy-s*0.32,cx,cy+s*0.05); };
@@ -1812,11 +1812,11 @@ async function generatePdf(b){
   const boxW = (PAGE_W-2*MARGIN-boxGap)/2;
 
   const renderBagRow = (bx, by, cabinN, checkedN) => {
-    drawBagIcon(bx+10, by, cabinN?gold:line);
+    drawBagIcon(bx+10, by, 12, cabinN?gold:line);
     doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...(cabinN?ink:inkSoft));
     doc.text(cabinN ? `${cabinN} ${LANG==='fr'?'bagage cabine':'cabin bag'}${cabinN>1?'s':''}` : (LANG==='fr'?'Cabine non incluse':'No cabin bag'), bx+22, by+3, {maxWidth: boxW/2-30});
     const bx2 = bx + boxW/2 - 6;
-    drawBagIcon(bx2+10, by, checkedN?gold:line);
+    drawBagIcon(bx2+10, by, 12, checkedN?gold:line);
     doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...(checkedN?ink:inkSoft));
     doc.text(checkedN ? `${checkedN} ${LANG==='fr'?'bagage en soute':'checked bag'}${checkedN>1?'s':''}` : (LANG==='fr'?'Soute non incluse':'No checked bag'), bx2+22, by+3, {maxWidth: boxW/2-30});
   };
@@ -1827,7 +1827,7 @@ async function generatePdf(b){
   doc.setFillColor(...petrol);
   doc.roundedRect(bagX, y, boxW, 24, 8, 8, 'F');
   doc.rect(bagX, y+16, boxW, 8, 'F');
-  drawBagIcon(bagX+16, y+13, [255,255,255]);
+  drawBagIcon(bagX+16, y+13, 13, [255,255,255]);
   doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(255,255,255);
   doc.text((LANG==='fr'?'BAGAGES INCLUS':'INCLUDED BAGGAGE'), bagX+28, y+16);
 
