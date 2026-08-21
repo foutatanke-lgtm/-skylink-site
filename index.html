@@ -1587,16 +1587,15 @@ async function generatePdf(b){
   const legLogos = await Promise.all(legs.map(leg => loadAirlineLogoPng(leg.logoUrl)));
 
   /* ---- En-tête (logo + coordonnées) ---- */
-  doc.setFillColor(...petrol);
+  const goldDark = [153,118,20]; // variante or plus foncée, lisible sur fond blanc
+  doc.setFillColor(255,255,255);
   doc.rect(0, 0, PAGE_W, 118, 'F');
-  doc.setDrawColor(...gold); doc.setLineWidth(2);
-  doc.line(0, 118, PAGE_W, 118);
-  try{ doc.addImage(LOGO_URI, 'PNG', MARGIN, 30, 50, 43); }catch(e){}
-  doc.setTextColor(255,255,255);
-  doc.setFont('helvetica','bold'); doc.setFontSize(19);
-  doc.text('SKYLINK VOYAGES', MARGIN+62, 52);
-  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(...goldLite);
-  doc.text(t('tagline'), MARGIN+62, 67);
+  try{ doc.addImage(LOGO_URI, 'PNG', MARGIN, 26, 56, 48); }catch(e){}
+  doc.setTextColor(...petrol);
+  doc.setFont('helvetica','bold'); doc.setFontSize(20);
+  doc.text('SKYLINK VOYAGES', MARGIN+68, 50);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(...goldDark);
+  doc.text(t('tagline'), MARGIN+68, 66);
 
   // Coordonnées (droite de l'en-tête)
   const contactLines = [
@@ -1607,15 +1606,19 @@ async function generatePdf(b){
   ].filter(Boolean);
   doc.setFont('helvetica','normal'); doc.setFontSize(8);
   contactLines.forEach((line, i)=>{
-    if (SKYLINK_CONTACT.website && line === SKYLINK_CONTACT.website) doc.setTextColor(...goldLite);
-    else doc.setTextColor(230,230,230);
-    doc.text(line, PAGE_W-MARGIN, 30 + i*12, {align:'right'});
+    if (SKYLINK_CONTACT.website && line === SKYLINK_CONTACT.website) doc.setTextColor(...goldDark);
+    else doc.setTextColor(...inkSoft);
+    doc.text(line, PAGE_W-MARGIN, 20 + i*12, {align:'right'});
   });
 
-  doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(255,255,255);
-  doc.text((hasReturn ? (LANG==='fr'?'ITINÉRAIRE ALLER-RETOUR':'ROUND-TRIP ITINERARY') : t('doc_title')).toUpperCase(), MARGIN, 104);
-  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...goldLite);
-  doc.text(`${LANG==='fr'?'RÉF.':'REF.'} SV-${b.id || b.pnr}`, PAGE_W-MARGIN, 104, {align:'right'});
+  doc.setDrawColor(...gold); doc.setLineWidth(1.5);
+  doc.line(MARGIN, 90, PAGE_W-MARGIN, 90);
+  doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(...petrol);
+  doc.text((hasReturn ? (LANG==='fr'?'ITINÉRAIRE ALLER-RETOUR':'ROUND-TRIP ITINERARY') : t('doc_title')).toUpperCase(), MARGIN, 108);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...goldDark);
+  doc.text(`${LANG==='fr'?'RÉF.':'REF.'} SV-${b.id || b.pnr}`, PAGE_W-MARGIN, 108, {align:'right'});
+  doc.setDrawColor(...line); doc.setLineWidth(1);
+  doc.line(0, 118, PAGE_W, 118);
 
   /* ---- Bandeau passager ---- */
   let y = 134;
