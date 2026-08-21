@@ -1647,25 +1647,7 @@ function generatePdf(b){
     doc.text(t('status_'+leg.status), px+panelW/2+4, ly+13);
   });
 
-  /* ---- Encart avertissement ---- */
   y += panelH + 18;
-  const noteH = 60;
-  doc.setFillColor(...cream);
-  doc.rect(MARGIN, y, PAGE_W-2*MARGIN, noteH, 'F');
-  doc.setFillColor(...gold);
-  doc.rect(MARGIN, y, 4, noteH, 'F');
-  // icône avertissement vectorielle (rond + !)
-  doc.setFillColor(...gold);
-  doc.circle(MARGIN+24, y+18, 8, 'F');
-  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(255,255,255);
-  doc.text('!', MARGIN+24, y+21.5, {align:'center'});
-  doc.setTextColor(122,90,18);
-  doc.setFont('helvetica','bold'); doc.setFontSize(9);
-  doc.text(t('doc_not_ticket'), MARGIN+40, y+21, {maxWidth:PAGE_W-2*MARGIN-56});
-  doc.setFont('helvetica','normal'); doc.setFontSize(8.3);
-  const stripHtml = document.createElement('div'); stripHtml.innerHTML = t('disclaimer');
-  const plain = stripHtml.textContent.replace(/\s+/g,' ').trim();
-  doc.text(plain, MARGIN+18, y+39, {maxWidth:PAGE_W-2*MARGIN-30});
 
   /* ---- Filigrane discret ---- */
   setOpacity(0.045);
