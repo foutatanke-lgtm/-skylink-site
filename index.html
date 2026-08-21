@@ -1419,7 +1419,8 @@ function renderWizStep(){
           pnr: outboundData.pnr, flightNo: f.flightNo, airline: f.airline,
           status: outboundData.status || "confirmed", createdAt: now,
           expiresAt: outboundData.expiresAt ? new Date(outboundData.expiresAt).getTime() : now + 36*3600000,
-          price: f.price, currency: f.currency, email: wizState.email, whatsapp: wizState.whatsapp
+          price: f.price, currency: f.currency, email: wizState.email, whatsapp: wizState.whatsapp,
+          airlineLogo: f.airlineLogo, checkedBags: f.checkedBags, cabinBags: f.cabinBags
         };
 
         if (rf) {
@@ -1432,6 +1433,7 @@ function renderWizStep(){
             booking.returnStatus = returnData.status || "confirmed";
             booking.returnExpiresAt = returnData.expiresAt ? new Date(returnData.expiresAt).getTime() : now + 36*3600000;
             booking.returnPrice = rf.price;
+            booking.returnAirlineLogo = rf.airlineLogo; booking.returnCheckedBags = rf.checkedBags; booking.returnCabinBags = rf.cabinBags;
           } catch (returnErr) {
             console.error('Erreur réservation vol retour :', returnErr);
             toast(LANG==='fr' ? 'Vol aller réservé, mais le vol retour a échoué. Contactez le support.' : 'Outbound booked, but the return flight failed. Please contact support.');
@@ -1464,7 +1466,13 @@ function renderWizStep(){
         <a href="#/espace-client" class="btn btn-outline">${t('w7_client')}</a>
       </div>
     `;
-    document.getElementById('dlPdf').onclick = ()=> generatePdf(b);
+    document.getElementById('dlPdf').onclick = ()=>{
+      const btn = document.getElementById('dlPdf');
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = LANG==='fr' ? 'Génération du PDF…' : 'Generating PDF…';
+      generatePdf(b).finally(()=>{ btn.disabled = false; btn.textContent = original; });
+    };
   }
 }
 
@@ -1509,7 +1517,38 @@ const SKYLINK_CONTACT = {
   website: 'www.skylinkvoyages.com',
 };
 
-function generatePdf(b){
+// Charge un logo compagnie (SVG hébergé par Duffel) et le rasterise en PNG pour jsPDF.
+// Renvoie null en cas d'échec (logo absent, CORS, réseau) — le PDF retombe alors sur le badge coloré.
+const logoCache = new Map();
+function loadAirlineLogoPng(url){
+  if (!url) return Promise.resolve(null);
+  if (logoCache.has(url)) return logoCache.get(url);
+  const p = new Promise((resolve)=>{
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = ()=>{
+      try{
+        const canvas = document.createElement('canvas');
+        // Le logo n'est affiché qu'à ~22pt de haut dans le PDF : on limite la résolution
+        // du raster (max 160px de large) pour rester net sans alourdir le fichier.
+        const naturalW = img.naturalWidth || 200, naturalH = img.naturalHeight || 60;
+        const targetW = Math.min(160, naturalW);
+        const targetH = Math.round(naturalH * (targetW / naturalW));
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, targetW, targetH);
+        resolve({ dataUrl: canvas.toDataURL('image/png'), w: naturalW, h: naturalH });
+      }catch(e){ resolve(null); }
+    };
+    img.onerror = ()=> resolve(null);
+    img.src = url;
+  });
+  logoCache.set(url, p);
+  return p;
+}
+
+async function generatePdf(b){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'pt', format:'a4'});
   const PAGE_W = 595, PAGE_H = 842, MARGIN = 40;
@@ -1539,11 +1578,13 @@ function generatePdf(b){
   const hasReturn = !!b.returnPnr;
 
   const legs = hasReturn ? [
-    { title: LANG==='fr'?'1. Vol aller':'1. Outbound', from:b.from, to:b.to, date:b.date, pnr:b.pnr, flightNo:b.flightNo, airline:b.airline, status:b.status, depTime:b.depTime, arrTime:b.arrTime },
-    { title: LANG==='fr'?'2. Vol retour':'2. Return', from:b.returnFrom, to:b.returnTo, date:b.returnDate, pnr:b.returnPnr, flightNo:b.returnFlightNo, airline:b.returnAirline, status:b.returnStatus, depTime:b.returnDepTime, arrTime:b.returnArrTime },
+    { title: LANG==='fr'?'1. Vol aller':'1. Outbound', from:b.from, to:b.to, date:b.date, pnr:b.pnr, flightNo:b.flightNo, airline:b.airline, status:b.status, logoUrl:b.airlineLogo, checkedBags:b.checkedBags, cabinBags:b.cabinBags },
+    { title: LANG==='fr'?'2. Vol retour':'2. Return', from:b.returnFrom, to:b.returnTo, date:b.returnDate, pnr:b.returnPnr, flightNo:b.returnFlightNo, airline:b.returnAirline, status:b.returnStatus, logoUrl:b.returnAirlineLogo, checkedBags:b.returnCheckedBags, cabinBags:b.returnCabinBags },
   ] : [
-    { title: LANG==='fr'?'Votre vol':'Your flight', from:b.from, to:b.to, date:b.date, pnr:b.pnr, flightNo:b.flightNo, airline:b.airline, status:b.status, depTime:b.depTime, arrTime:b.arrTime },
+    { title: LANG==='fr'?'Votre vol':'Your flight', from:b.from, to:b.to, date:b.date, pnr:b.pnr, flightNo:b.flightNo, airline:b.airline, status:b.status, logoUrl:b.airlineLogo, checkedBags:b.checkedBags, cabinBags:b.cabinBags },
   ];
+  // Précharge les logos en parallèle (échoue silencieusement -> repli sur le badge coloré)
+  const legLogos = await Promise.all(legs.map(leg => loadAirlineLogoPng(leg.logoUrl)));
 
   /* ---- En-tête (logo + coordonnées) ---- */
   doc.setFillColor(...petrol);
@@ -1600,8 +1641,14 @@ function generatePdf(b){
   y += 44 + 16;
   const gap = hasReturn ? 16 : 0;
   const panelW = hasReturn ? (PAGE_W-2*MARGIN-gap)/2 : PAGE_W-2*MARGIN;
-  const panelH = 172;
+  const panelH = 194;
   const barH = 22;
+
+  const drawBagIcon = (cx, cy, color)=>{
+    doc.setDrawColor(...color); doc.setLineWidth(1.1);
+    doc.roundedRect(cx-6, cy-5, 12, 10, 1.5, 1.5, 'S');
+    doc.roundedRect(cx-2.5, cy-8, 5, 3.5, 1, 1, 'S');
+  };
 
   legs.forEach((leg, li)=>{
     const px = MARGIN + li*(panelW+gap);
@@ -1617,16 +1664,26 @@ function generatePdf(b){
     doc.text(String(leg.pnr), px+panelW-14, y+15, {align:'right'});
 
     let ly = y+barH+16;
-    // badge compagnie (cercle coloré + initiales, même logique que sur le site)
-    const alColor = hexToRgb(airlineColor(leg.flightNo));
-    doc.setFillColor(...alColor);
-    doc.circle(px+25, ly-4, 11, 'F');
-    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(255,255,255);
-    doc.text(airlineInitials(leg.flightNo), px+25, ly-1, {align:'center'});
-    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...ink);
-    doc.text(String(leg.airline), px+42, ly-6, {maxWidth:panelW-58});
-    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...inkSoft);
-    doc.text(String(leg.flightNo), px+42, ly+7);
+    // logo compagnie réel (Duffel) si dispo, sinon badge coloré + initiales
+    const logo = legLogos[li];
+    if (logo && logo.dataUrl) {
+      const lh = 22, lw = Math.min(34, lh * (logo.w / logo.h || 1));
+      try { doc.addImage(logo.dataUrl, 'PNG', px+16, ly-15, lw, lh); } catch(e){}
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...ink);
+      doc.text(String(leg.airline), px+16+lw+10, ly-6, {maxWidth:panelW-lw-42});
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...inkSoft);
+      doc.text(String(leg.flightNo), px+16+lw+10, ly+7);
+    } else {
+      const alColor = hexToRgb(airlineColor(leg.flightNo));
+      doc.setFillColor(...alColor);
+      doc.circle(px+25, ly-4, 11, 'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(255,255,255);
+      doc.text(airlineInitials(leg.flightNo), px+25, ly-1, {align:'center'});
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...ink);
+      doc.text(String(leg.airline), px+42, ly-6, {maxWidth:panelW-58});
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...inkSoft);
+      doc.text(String(leg.flightNo), px+42, ly+7);
+    }
 
     // grands codes IATA + ligne pointillée
     ly += 38;
@@ -1660,6 +1717,22 @@ function generatePdf(b){
     doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(...ink);
     doc.text(String(leg.date), px+16, ly+13);
     doc.text(t('status_'+leg.status), px+panelW/2+4, ly+13);
+
+    // franchise bagages (données réelles Duffel)
+    if (leg.checkedBags != null || leg.cabinBags != null) {
+      ly += 30;
+      doc.setDrawColor(...line); doc.setLineWidth(0.7);
+      doc.line(px+16, ly, px+panelW-16, ly);
+      ly += 18;
+      const cabinN = leg.cabinBags || 0, checkedN = leg.checkedBags || 0;
+      drawBagIcon(px+22, ly-3, cabinN ? gold : line);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...(cabinN ? ink : inkSoft));
+      doc.text(cabinN ? `${cabinN} ${LANG==='fr'?'bagage cabine':'cabin bag'}${cabinN>1?'s':''}` : (LANG==='fr'?'Cabine non incluse':'No cabin bag'), px+34, ly);
+      const bx2 = px+panelW/2+8;
+      drawBagIcon(bx2, ly-3, checkedN ? gold : line);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...(checkedN ? ink : inkSoft));
+      doc.text(checkedN ? `${checkedN} ${LANG==='fr'?'bagage en soute':'checked bag'}${checkedN>1?'s':''}` : (LANG==='fr'?'Soute non incluse':'No checked bag'), bx2+12, ly);
+    }
   });
 
   y += panelH + 18;
