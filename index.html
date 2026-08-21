@@ -1521,6 +1521,15 @@ function generatePdf(b){
   const ink      = [15,34,41];
   const line     = [221,227,224];
   const cream    = [251,247,239];
+  const hexToRgb = (hex)=>{
+    const n = parseInt(hex.replace('#',''), 16);
+    return [(n>>16)&255, (n>>8)&255, n&255];
+  };
+  const drawCheck = (cx, cy, color)=>{
+    doc.setDrawColor(...color); doc.setLineWidth(1.4);
+    doc.line(cx-4, cy, cx-1, cy+3.5);
+    doc.line(cx-1, cy+3.5, cx+5, cy-4);
+  };
   const statusColors = {
     confirmed: [46,125,91], paid: [46,125,91], pending: [201,139,31],
     searching: [201,139,31], expired: [181,73,58], cancelled: [181,73,58],
@@ -1608,10 +1617,16 @@ function generatePdf(b){
     doc.text(String(leg.pnr), px+panelW-14, y+15, {align:'right'});
 
     let ly = y+barH+16;
+    // badge compagnie (cercle coloré + initiales, même logique que sur le site)
+    const alColor = hexToRgb(airlineColor(leg.flightNo));
+    doc.setFillColor(...alColor);
+    doc.circle(px+25, ly-4, 11, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(255,255,255);
+    doc.text(airlineInitials(leg.flightNo), px+25, ly-1, {align:'center'});
     doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...ink);
-    doc.text(String(leg.airline), px+16, ly, {maxWidth:panelW-32});
+    doc.text(String(leg.airline), px+42, ly-6, {maxWidth:panelW-58});
     doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...inkSoft);
-    doc.text(String(leg.flightNo), px+16, ly+13);
+    doc.text(String(leg.flightNo), px+42, ly+7);
 
     // grands codes IATA + ligne pointillée
     ly += 38;
@@ -1648,6 +1663,36 @@ function generatePdf(b){
   });
 
   y += panelH + 18;
+
+  /* ---- Informations importantes ---- */
+  const infoItems = LANG==='fr' ? [
+    'Présentez-vous à l\'aéroport au moins 3 heures avant le départ pour un vol international.',
+    'Munissez-vous d\'une pièce d\'identité ou d\'un passeport valide, correspondant au nom du passager.',
+    'Vérifiez les horaires, le terminal et le statut du vol avant votre déplacement.',
+    `Une confirmation a été envoyée à : ${b.email || '—'} (pensez à vérifier vos courriers indésirables).`,
+  ] : [
+    'Arrive at the airport at least 3 hours before departure for an international flight.',
+    'Bring a valid ID or passport matching the passenger name.',
+    'Double-check flight times, terminal and status before you travel.',
+    `A confirmation was sent to: ${b.email || '—'} (check your spam folder too).`,
+  ];
+  const infoBarH = 24;
+  const infoLineH = 26;
+  const infoH = infoBarH + 14 + infoItems.length*infoLineH + 10;
+  doc.setDrawColor(...line); doc.setLineWidth(1);
+  doc.roundedRect(MARGIN, y, PAGE_W-2*MARGIN, infoH, 8, 8, 'S');
+  doc.setFillColor(...gold);
+  doc.roundedRect(MARGIN, y, PAGE_W-2*MARGIN, infoBarH, 8, 8, 'F');
+  doc.rect(MARGIN, y+infoBarH-8, PAGE_W-2*MARGIN, 8, 'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(...petrol);
+  doc.text((LANG==='fr'?'INFORMATIONS IMPORTANTES':'IMPORTANT INFORMATION'), MARGIN+14, y+16);
+  let infoY = y+infoBarH+22;
+  infoItems.forEach(item=>{
+    drawCheck(MARGIN+22, infoY-4, gold);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...ink);
+    doc.text(item, MARGIN+36, infoY, {maxWidth: PAGE_W-2*MARGIN-50});
+    infoY += infoLineH;
+  });
 
   /* ---- Pied de page ---- */
   const footY = PAGE_H-56;
