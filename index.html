@@ -1405,7 +1405,8 @@ function renderWizStep(){
         });
         const data = await res.json();
         if (!res.ok) {
-          const e = new Error(data.message || data.error || 'booking_failed');
+          const duffelDetail = data.details?.errors?.[0]?.message;
+          const e = new Error(data.message || duffelDetail || data.error || 'booking_failed');
           e.code = data.error;
           throw e;
         }
