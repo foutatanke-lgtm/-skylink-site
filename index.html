@@ -1649,12 +1649,6 @@ function generatePdf(b){
 
   y += panelH + 18;
 
-  /* ---- Filigrane discret ---- */
-  setOpacity(0.045);
-  doc.setFont('helvetica','bold'); doc.setFontSize(38); doc.setTextColor(...petrol);
-  doc.text(LANG==='fr' ? 'RÉSERVATION TEMPORAIRE' : 'TEMPORARY RESERVATION', PAGE_W/2+40, y+140, {align:'center', angle:22});
-  resetOpacity();
-
   /* ---- Pied de page ---- */
   const footY = PAGE_H-56;
   doc.setFillColor(...petrol);
