@@ -1503,10 +1503,10 @@ route('/reserver', function(){ resetWizard(); renderWizard(); });
 /* ---------------- PDF generation ---------------- */
 // ⚠️ À remplacer par les vraies coordonnées SkyLink Voyages (adresse, téléphone(s), site web).
 const SKYLINK_CONTACT = {
-  address: ['Casablanca, Maroc'],
-  phones: [],
-  email: 'support@skylinkvoyages.example',
-  website: '',
+  address: ['H9WQ+RF3, Av. des FAR', 'Casablanca 20100, Maroc'],
+  phones: ['+212 522 100 898', '+212 666 925 431'],
+  email: 'skylinkvoyages@gmail.com',
+  website: 'www.skylinkvoyages.com',
 };
 
 function generatePdf(b){
@@ -1681,8 +1681,8 @@ function generatePdf(b){
   doc.line(0, footY, PAGE_W, footY);
   doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(255,255,255);
   doc.text('SkyLink Voyages', MARGIN, footY+24);
-  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...goldLite);
-  doc.text([...SKYLINK_CONTACT.address, SKYLINK_CONTACT.email].filter(Boolean).join(' — '), MARGIN, footY+38);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...goldLite);
+  doc.text([SKYLINK_CONTACT.address.join(', '), SKYLINK_CONTACT.phones.join(' / '), SKYLINK_CONTACT.email].filter(Boolean).join('  —  '), MARGIN, footY+38, {maxWidth: 340});
   doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(255,255,255);
   doc.text(LANG==='fr' ? 'Document généré électroniquement' : 'Electronically generated document', PAGE_W-MARGIN, footY+24, {align:'right'});
   doc.text(fmtDateTime(Date.now()), PAGE_W-MARGIN, footY+38, {align:'right'});
