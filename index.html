@@ -1424,7 +1424,11 @@ function renderWizStep(){
           status: outboundData.status || "confirmed", createdAt: now,
           expiresAt: outboundData.expiresAt ? new Date(outboundData.expiresAt).getTime() : now + 36*3600000,
           price: f.price, currency: f.currency, email: wizState.email, whatsapp: wizState.whatsapp,
-          airlineLogo: f.airlineLogo, checkedBags: f.checkedBags, cabinBags: f.cabinBags
+          airlineLogo: f.airlineLogo, checkedBags: f.checkedBags, cabinBags: f.cabinBags,
+          depTime: f.depTime, arrTime: f.arrTime, durationMin: f.durationMin, stops: f.stops,
+          originAirportName: f.originAirportName, destinationAirportName: f.destinationAirportName,
+          originTerminal: f.originTerminal, destinationTerminal: f.destinationTerminal,
+          aircraft: f.aircraft, cabinClass: f.cabinClass
         };
 
         if (rf) {
@@ -1438,6 +1442,10 @@ function renderWizStep(){
             booking.returnExpiresAt = returnData.expiresAt ? new Date(returnData.expiresAt).getTime() : now + 36*3600000;
             booking.returnPrice = rf.price;
             booking.returnAirlineLogo = rf.airlineLogo; booking.returnCheckedBags = rf.checkedBags; booking.returnCabinBags = rf.cabinBags;
+            booking.returnDepTime = rf.depTime; booking.returnArrTime = rf.arrTime; booking.returnDurationMin = rf.durationMin; booking.returnStops = rf.stops;
+            booking.returnOriginAirportName = rf.originAirportName; booking.returnDestinationAirportName = rf.destinationAirportName;
+            booking.returnOriginTerminal = rf.originTerminal; booking.returnDestinationTerminal = rf.destinationTerminal;
+            booking.returnAircraft = rf.aircraft; booking.returnCabinClass = rf.cabinClass;
           } catch (returnErr) {
             console.error('Erreur réservation vol retour :', returnErr);
             const msg = returnErr.code === 'offer_not_bookable'
@@ -1574,143 +1582,173 @@ async function generatePdf(b){
   const petrol   = [11,31,58];
   const gold     = [201,162,39];
   const goldLite = [217,185,74];
-  const teal     = [44,99,163];
+  const goldDark = [153,118,20];
   const inkSoft  = [74,96,104];
   const ink      = [15,34,41];
   const line     = [221,227,224];
-  const cream    = [251,247,239];
-  const hexToRgb = (hex)=>{
-    const n = parseInt(hex.replace('#',''), 16);
-    return [(n>>16)&255, (n>>8)&255, n&255];
-  };
-  const drawCheck = (cx, cy, color)=>{
-    doc.setDrawColor(...color); doc.setLineWidth(1.4);
-    doc.line(cx-4, cy, cx-1, cy+3.5);
-    doc.line(cx-1, cy+3.5, cx+5, cy-4);
-  };
-  const statusColors = {
-    confirmed: [46,125,91], paid: [46,125,91], pending: [201,139,31],
-    searching: [201,139,31], expired: [181,73,58], cancelled: [181,73,58],
-  };
-  const setOpacity = (a)=>{ try{ doc.setGState(new doc.GState({opacity:a})); }catch(e){} };
-  const resetOpacity = ()=> setOpacity(1);
-  const hasReturn = !!b.returnPnr;
+  const hexToRgb = (hex)=>{ const n=parseInt(hex.replace('#',''),16); return [(n>>16)&255,(n>>8)&255,n&255]; };
+  const statusColors = { confirmed:[46,125,91], paid:[46,125,91], pending:[201,139,31], searching:[201,139,31], expired:[181,73,58], cancelled:[181,73,58] };
 
+  /* ---- petites icônes vectorielles (les polices PDF standard ne supportent pas les emoji) ---- */
+  const drawCheck = (cx,cy,color)=>{ doc.setDrawColor(...color); doc.setLineWidth(1.4); doc.line(cx-4,cy,cx-1,cy+3.5); doc.line(cx-1,cy+3.5,cx+5,cy-4); };
+  const drawBagIcon = (cx,cy,color)=>{ doc.setDrawColor(...color); doc.setLineWidth(1.1); doc.roundedRect(cx-6,cy-5,12,10,1.5,1.5,'S'); doc.roundedRect(cx-2.5,cy-8,5,3.5,1,1,'S'); };
+  const drawPin = (cx,cy,s,color)=>{ doc.setFillColor(...color); doc.circle(cx,cy-s*0.12,s*0.5,'F'); doc.triangle(cx-s*0.32,cy-s*0.02,cx+s*0.32,cy-s*0.02,cx,cy+s*0.55,'F'); doc.setFillColor(255,255,255); doc.circle(cx,cy-s*0.12,s*0.2,'F'); };
+  const drawPhone = (cx,cy,s,color)=>{ doc.setDrawColor(...color); doc.setLineWidth(1.2); doc.roundedRect(cx-s*0.28,cy-s*0.5,s*0.56,s,s*0.14,s*0.14,'S'); };
+  const drawEnvelope = (cx,cy,s,color)=>{ doc.setDrawColor(...color); doc.setLineWidth(1); doc.roundedRect(cx-s*0.5,cy-s*0.32,s,s*0.64,1.5,1.5,'S'); doc.line(cx-s*0.5,cy-s*0.32,cx,cy+s*0.05); doc.line(cx+s*0.5,cy-s*0.32,cx,cy+s*0.05); };
+  const drawGlobe = (cx,cy,s,color)=>{ doc.setDrawColor(...color); doc.setLineWidth(0.9); doc.circle(cx,cy,s*0.5,'S'); doc.ellipse(cx,cy,s*0.22,s*0.5,'S'); doc.line(cx-s*0.5,cy,cx+s*0.5,cy); };
+  const drawPlaneTri = (cx,cy,s,color)=>{ doc.setFillColor(...color); doc.triangle(cx-s*0.5,cy-s*0.35,cx-s*0.5,cy+s*0.35,cx+s*0.55,cy,'F'); };
+  const drawClock = (cx,cy,s,color)=>{ doc.setDrawColor(...color); doc.setLineWidth(1); doc.circle(cx,cy,s*0.5,'S'); doc.line(cx,cy,cx,cy-s*0.32); doc.line(cx,cy,cx+s*0.24,cy); };
+  const drawCalendar = (cx,cy,s,color)=>{ doc.setDrawColor(...color); doc.setLineWidth(1); doc.roundedRect(cx-s*0.5,cy-s*0.42,s,s*0.84,1.5,1.5,'S'); doc.line(cx-s*0.5,cy-s*0.1,cx+s*0.5,cy-s*0.1); };
+  const drawSeat = (cx,cy,s,color)=>{ doc.setDrawColor(...color); doc.setLineWidth(1); doc.roundedRect(cx-s*0.32,cy-s*0.4,s*0.64,s*0.55,1.5,1.5,'S'); doc.line(cx-s*0.32,cy+s*0.15,cx-s*0.5,cy+s*0.42); doc.line(cx+s*0.32,cy+s*0.15,cx+s*0.5,cy+s*0.42); };
+  const drawTicket = (cx,cy,s,color)=>{ doc.setDrawColor(...color); doc.setLineWidth(1); doc.roundedRect(cx-s*0.55,cy-s*0.32,s*1.1,s*0.64,2,2,'S'); doc.setLineDashPattern([1.2,1.2],0); doc.line(cx,cy-s*0.32,cx,cy+s*0.32); doc.setLineDashPattern([],0); };
+  const drawPerson = (cx,cy,s,color)=>{ doc.setFillColor(...color); doc.circle(cx,cy-s*0.28,s*0.24,'F'); doc.roundedRect(cx-s*0.32,cy-s*0.02,s*0.64,s*0.42,s*0.12,s*0.12,'F'); };
+  const drawInfoCircle = (cx,cy,s,color)=>{ doc.setDrawColor(...color); doc.setLineWidth(1.2); doc.circle(cx,cy,s*0.5,'S'); doc.setFillColor(...color); doc.circle(cx,cy-s*0.18,0.9,'F'); doc.setLineWidth(1); doc.line(cx,cy-s*0.02,cx,cy+s*0.22); };
+  const drawSkyline = (x,y,w,color)=>{
+    doc.setDrawColor(...color); doc.setLineWidth(0.8);
+    const bd = [[0.02,0.06,11],[0.10,0.05,17],[0.17,0.07,9],[0.27,0.05,20],[0.34,0.06,13],[0.42,0.04,18],[0.48,0.08,8],[0.58,0.05,15],[0.65,0.06,11],[0.73,0.05,19],[0.80,0.07,10],[0.89,0.05,14]];
+    bd.forEach(([dx,bw,h])=> doc.rect(x+w*dx, y-h, w*bw, h, 'S'));
+    doc.line(x,y,x+w,y);
+  };
+
+  const hasReturn = !!b.returnPnr;
   const legs = hasReturn ? [
-    { title: LANG==='fr'?'1. Vol aller':'1. Outbound', from:b.from, to:b.to, date:b.date, pnr:b.pnr, flightNo:b.flightNo, airline:b.airline, status:b.status, logoUrl:b.airlineLogo, checkedBags:b.checkedBags, cabinBags:b.cabinBags },
-    { title: LANG==='fr'?'2. Vol retour':'2. Return', from:b.returnFrom, to:b.returnTo, date:b.returnDate, pnr:b.returnPnr, flightNo:b.returnFlightNo, airline:b.returnAirline, status:b.returnStatus, logoUrl:b.returnAirlineLogo, checkedBags:b.returnCheckedBags, cabinBags:b.returnCabinBags },
+    { title: LANG==='fr'?'1. Vol aller':'1. Outbound', from:b.from, to:b.to, date:b.date, pnr:b.pnr, flightNo:b.flightNo, airline:b.airline, logoUrl:b.airlineLogo, depTime:b.depTime, arrTime:b.arrTime, durationMin:b.durationMin, originAirportName:b.originAirportName, destinationAirportName:b.destinationAirportName, originTerminal:b.originTerminal, destinationTerminal:b.destinationTerminal, aircraft:b.aircraft },
+    { title: LANG==='fr'?'2. Vol retour':'2. Return', from:b.returnFrom, to:b.returnTo, date:b.returnDate, pnr:b.returnPnr, flightNo:b.returnFlightNo, airline:b.returnAirline, logoUrl:b.returnAirlineLogo, depTime:b.returnDepTime, arrTime:b.returnArrTime, durationMin:b.returnDurationMin, originAirportName:b.returnOriginAirportName, destinationAirportName:b.returnDestinationAirportName, originTerminal:b.returnOriginTerminal, destinationTerminal:b.returnDestinationTerminal, aircraft:b.returnAircraft },
   ] : [
-    { title: LANG==='fr'?'Votre vol':'Your flight', from:b.from, to:b.to, date:b.date, pnr:b.pnr, flightNo:b.flightNo, airline:b.airline, status:b.status, logoUrl:b.airlineLogo, checkedBags:b.checkedBags, cabinBags:b.cabinBags },
+    { title: LANG==='fr'?'Votre vol':'Your flight', from:b.from, to:b.to, date:b.date, pnr:b.pnr, flightNo:b.flightNo, airline:b.airline, logoUrl:b.airlineLogo, depTime:b.depTime, arrTime:b.arrTime, durationMin:b.durationMin, originAirportName:b.originAirportName, destinationAirportName:b.destinationAirportName, originTerminal:b.originTerminal, destinationTerminal:b.destinationTerminal, aircraft:b.aircraft },
   ];
-  // Précharge les logos en parallèle (échoue silencieusement -> repli sur le badge coloré)
   const legLogos = await Promise.all(legs.map(leg => loadAirlineLogoPng(leg.logoUrl)));
 
-  /* ---- En-tête (logo + coordonnées) ---- */
-  const goldDark = [153,118,20]; // variante or plus foncée, lisible sur fond blanc
+  /* ================= EN-TÊTE ================= */
   doc.setFillColor(255,255,255);
-  doc.rect(0, 0, PAGE_W, 118, 'F');
-  try{ doc.addImage(LOGO_URI, 'PNG', MARGIN, 26, 56, 48); }catch(e){}
+  doc.rect(0,0,PAGE_W,118,'F');
+  try{ doc.addImage(LOGO_URI,'PNG',MARGIN,26,56,48); }catch(e){}
   doc.setTextColor(...petrol);
   doc.setFont('helvetica','bold'); doc.setFontSize(20);
   doc.text('SKYLINK VOYAGES', MARGIN+68, 50);
   doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(...goldDark);
   doc.text(t('tagline'), MARGIN+68, 66);
 
-  // Coordonnées (droite de l'en-tête)
   const contactLines = [
-    ...SKYLINK_CONTACT.address,
-    ...SKYLINK_CONTACT.phones,
-    SKYLINK_CONTACT.email,
-    SKYLINK_CONTACT.website,
-  ].filter(Boolean);
+    ...(SKYLINK_CONTACT.address.length ? [{ text: SKYLINK_CONTACT.address.join(', '), icon: drawPin }] : []),
+    ...(SKYLINK_CONTACT.phones.length ? [{ text: SKYLINK_CONTACT.phones.join(' / '), icon: drawPhone }] : []),
+    ...(SKYLINK_CONTACT.email ? [{ text: SKYLINK_CONTACT.email, icon: drawEnvelope }] : []),
+    ...(SKYLINK_CONTACT.website ? [{ text: SKYLINK_CONTACT.website, icon: drawGlobe }] : []),
+  ];
   doc.setFont('helvetica','normal'); doc.setFontSize(8);
-  contactLines.forEach((line, i)=>{
-    if (SKYLINK_CONTACT.website && line === SKYLINK_CONTACT.website) doc.setTextColor(...goldDark);
-    else doc.setTextColor(...inkSoft);
-    doc.text(line, PAGE_W-MARGIN, 20 + i*12, {align:'right'});
+  contactLines.forEach((c,i)=>{
+    const isWebsite = SKYLINK_CONTACT.website && c.text === SKYLINK_CONTACT.website;
+    const col = isWebsite ? goldDark : inkSoft;
+    doc.setTextColor(...col);
+    const ty = 24 + i*13;
+    const tw = doc.getTextWidth(c.text);
+    doc.text(c.text, PAGE_W-MARGIN, ty, {align:'right'});
+    c.icon(PAGE_W-MARGIN-tw-11, ty-3, 8, col);
   });
 
   doc.setDrawColor(...gold); doc.setLineWidth(1.5);
-  doc.line(MARGIN, 90, PAGE_W-MARGIN, 90);
-  doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(...petrol);
-  doc.text((hasReturn ? (LANG==='fr'?'ITINÉRAIRE ALLER-RETOUR':'ROUND-TRIP ITINERARY') : t('doc_title')).toUpperCase(), MARGIN, 108);
-  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...goldDark);
-  doc.text(`${LANG==='fr'?'RÉF.':'REF.'} SV-${b.id || b.pnr}`, PAGE_W-MARGIN, 108, {align:'right'});
+  doc.line(MARGIN, 92, PAGE_W-MARGIN, 92);
   doc.setDrawColor(...line); doc.setLineWidth(1);
-  doc.line(0, 118, PAGE_W, 118);
+  doc.line(0,118,PAGE_W,118);
 
-  /* ---- Bandeau passager ---- */
-  let y = 134;
+  /* ================= TITRE + RÉFÉRENCE GLOBALE ================= */
+  let y = 118;
+  drawPlaneTri(MARGIN+8, y+30, 13, gold);
+  doc.setFont('helvetica','bold'); doc.setFontSize(11.5); doc.setTextColor(...petrol);
+  doc.text((hasReturn ? (LANG==='fr'?'Itinéraire / Confirmation de réservation':'Itinerary / Booking confirmation') : t('doc_title')).toUpperCase(), MARGIN+24, y+34, {maxWidth: 280});
+
+  const refBoxW = 168, refBoxH = 40, refBoxX = PAGE_W-MARGIN-refBoxW, refBoxY = y+8;
+  doc.setFillColor(...petrol);
+  doc.roundedRect(refBoxX, refBoxY, refBoxW, refBoxH, 6, 6, 'F');
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...goldLite);
+  doc.text((LANG==='fr'?'RÉFÉRENCE GLOBALE':'GLOBAL REFERENCE').toUpperCase(), refBoxX+refBoxW/2, refBoxY+15, {align:'center'});
+  doc.setFont('courier','bold'); doc.setFontSize(13); doc.setTextColor(255,255,255);
+  doc.text(`SV-${b.id || b.pnr}`, refBoxX+refBoxW/2, refBoxY+31, {align:'center'});
+
+  y += 62;
+
+  /* ================= BANDEAU PASSAGER (4 colonnes) ================= */
+  const passH = 62;
   doc.setDrawColor(...line); doc.setLineWidth(1);
-  doc.roundedRect(MARGIN, y, PAGE_W-2*MARGIN, 44, 8, 8, 'S');
-  const passCols = [MARGIN+18, MARGIN+230, PAGE_W-MARGIN-130];
-  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...inkSoft);
-  doc.text(t('passenger').toUpperCase(), passCols[0], y+17);
-  doc.text(t('w3_email').toUpperCase(), passCols[1], y+17);
-  doc.setFont('helvetica','normal'); doc.setFontSize(11.5); doc.setTextColor(...ink);
-  doc.text(`${b.firstName} ${b.lastName}`, passCols[0], y+34);
-  doc.text(String(b.email || '—'), passCols[1], y+34, {maxWidth:160});
-  const overallStatus = statusColors[b.status] || inkSoft;
-  doc.setFillColor(...overallStatus);
-  const stTxt0 = t('status_'+b.status).toUpperCase();
-  doc.setFont('helvetica','bold'); doc.setFontSize(8);
-  const stW0 = doc.getTextWidth(stTxt0)+16;
-  doc.roundedRect(PAGE_W-MARGIN-18-stW0, y+22, stW0, 16, 8, 8, 'F');
-  doc.setTextColor(255,255,255);
-  doc.text(stTxt0, PAGE_W-MARGIN-18-stW0/2, y+33, {align:'center'});
+  doc.roundedRect(MARGIN, y, PAGE_W-2*MARGIN, passH, 8, 8, 'S');
+  const orderRef = (b.orderId || b.id || '').toString().slice(-10).toUpperCase();
+  const passCols = [
+    { icon: drawPerson, label: t('passenger'), value: `${b.firstName} ${b.lastName}` },
+    { icon: drawSeat, label: LANG==='fr'?'Classe':'Class', value: b.cabinClass || 'Economy' },
+    { icon: drawTicket, label: LANG==='fr'?'N° de dossier':'Booking ref.', value: orderRef },
+    { icon: drawTicket, label: LANG==='fr'?'PNR aller':'Outbound PNR', value: b.pnr },
+  ];
+  const colW4 = (PAGE_W-2*MARGIN)/4;
+  passCols.forEach((c,i)=>{
+    const cx0 = MARGIN + i*colW4;
+    c.icon(cx0+22, y+25, 15, gold);
+    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...inkSoft);
+    doc.text(c.label.toUpperCase(), cx0+38, y+21, {maxWidth: colW4-46});
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...ink);
+    doc.text(String(c.value), cx0+38, y+36, {maxWidth: colW4-46});
+    if (i>0){ doc.setDrawColor(...line); doc.setLineWidth(0.7); doc.line(cx0, y+10, cx0, y+passH-10); }
+  });
+  y += passH + 14;
 
-  /* ---- Panneaux de vol (1 ou 2 côte à côte) ---- */
-  y += 44 + 16;
+  /* ================= PNR ALLER / RETOUR (aller-retour uniquement) ================= */
+  if (hasReturn) {
+    const pnrH = 54;
+    doc.setDrawColor(...line); doc.setLineWidth(1);
+    doc.roundedRect(MARGIN, y, PAGE_W-2*MARGIN, pnrH, 8, 8, 'S');
+    const halfW = (PAGE_W-2*MARGIN)/2;
+    doc.line(MARGIN+halfW, y+10, MARGIN+halfW, y+pnrH-10);
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...inkSoft);
+    doc.text((LANG==='fr'?'PNR ALLER':'OUTBOUND PNR'), MARGIN+halfW/2, y+18, {align:'center'});
+    doc.text((LANG==='fr'?`PNR RETOUR (${(b.returnAirline||'').toUpperCase()})`:`RETURN PNR (${(b.returnAirline||'').toUpperCase()})`), MARGIN+halfW+halfW/2, y+18, {align:'center', maxWidth: halfW-20});
+    doc.setFont('courier','bold'); doc.setFontSize(17); doc.setTextColor(...petrol);
+    doc.text(b.pnr, MARGIN+halfW/2, y+40, {align:'center'});
+    doc.text(b.returnPnr, MARGIN+halfW+halfW/2, y+40, {align:'center'});
+    y += pnrH + 16;
+  }
+
+  /* ================= PANNEAUX DE VOL ================= */
   const gap = hasReturn ? 16 : 0;
   const panelW = hasReturn ? (PAGE_W-2*MARGIN-gap)/2 : PAGE_W-2*MARGIN;
-  const panelH = 194;
-  const barH = 22;
-
-  const drawBagIcon = (cx, cy, color)=>{
-    doc.setDrawColor(...color); doc.setLineWidth(1.1);
-    doc.roundedRect(cx-6, cy-5, 12, 10, 1.5, 1.5, 'S');
-    doc.roundedRect(cx-2.5, cy-8, 5, 3.5, 1, 1, 'S');
-  };
+  const panelH = 238;
+  const barH = 24;
 
   legs.forEach((leg, li)=>{
     const px = MARGIN + li*(panelW+gap);
+    const barBg = li===1 ? gold : petrol;
+    const barFg = li===1 ? petrol : [255,255,255];
+    const barIconColor = li===1 ? petrol : gold;
+
     doc.setDrawColor(...line); doc.setLineWidth(1);
     doc.roundedRect(px, y, panelW, panelH, 8, 8, 'S');
-    // barre de titre colorée
-    doc.setFillColor(...(li===1 ? teal : petrol));
+    doc.setFillColor(...barBg);
     doc.roundedRect(px, y, panelW, barH, 8, 8, 'F');
-    doc.rect(px, y+barH-8, panelW, 8, 'F'); // carré le bas du bandeau (coins non arrondis en bas)
-    doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(255,255,255);
-    doc.text(leg.title.toUpperCase(), px+14, y+15);
-    doc.setFont('courier','bold'); doc.setFontSize(9); doc.setTextColor(...goldLite);
-    doc.text(String(leg.pnr), px+panelW-14, y+15, {align:'right'});
+    doc.rect(px, y+barH-8, panelW, 8, 'F');
+    drawPlaneTri(px+16, y+barH/2, 11, barIconColor);
+    doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(...barFg);
+    doc.text(leg.title.toUpperCase(), px+30, y+barH/2+3.5);
+    doc.setFont('courier','bold'); doc.setFontSize(8.5); doc.setTextColor(...barFg);
+    doc.text(leg.flightNo, px+panelW-14, y+barH/2+3.5, {align:'right'});
 
     let ly = y+barH+16;
-    // logo compagnie réel (Duffel) si dispo, sinon badge coloré + initiales
     const logo = legLogos[li];
     if (logo && logo.dataUrl) {
-      const lh = 22, lw = Math.min(34, lh * (logo.w / logo.h || 1));
-      try { doc.addImage(logo.dataUrl, 'PNG', px+16, ly-15, lw, lh); } catch(e){}
+      const lh = 20, lw = Math.min(32, lh * (logo.w / logo.h || 1));
+      try { doc.addImage(logo.dataUrl, 'PNG', px+16, ly-14, lw, lh); } catch(e){}
       doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...ink);
-      doc.text(String(leg.airline), px+16+lw+10, ly-6, {maxWidth:panelW-lw-42});
-      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...inkSoft);
-      doc.text(String(leg.flightNo), px+16+lw+10, ly+7);
+      doc.text(String(leg.airline), px+16+lw+10, ly-4, {maxWidth:panelW-lw-42});
     } else {
       const alColor = hexToRgb(airlineColor(leg.flightNo));
       doc.setFillColor(...alColor);
-      doc.circle(px+25, ly-4, 11, 'F');
-      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(255,255,255);
-      doc.text(airlineInitials(leg.flightNo), px+25, ly-1, {align:'center'});
+      doc.circle(px+25, ly-8, 10, 'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+      doc.text(airlineInitials(leg.flightNo), px+25, ly-5, {align:'center'});
       doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...ink);
-      doc.text(String(leg.airline), px+42, ly-6, {maxWidth:panelW-58});
-      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...inkSoft);
-      doc.text(String(leg.flightNo), px+42, ly+7);
+      doc.text(String(leg.airline), px+42, ly-4, {maxWidth:panelW-58});
     }
 
-    // grands codes IATA + ligne pointillée
-    ly += 38;
+    ly += 28;
     const fCode = extractIata(leg.from), tCode = extractIata(leg.to);
-    doc.setFont('helvetica','bold'); doc.setFontSize(hasReturn?19:26); doc.setTextColor(...petrol);
+    doc.setFont('helvetica','bold'); doc.setFontSize(hasReturn?18:24); doc.setTextColor(...petrol);
     doc.text(fCode, px+16, ly);
     const tX = px+panelW-16;
     doc.text(tCode, tX, ly, {align:'right'});
@@ -1724,84 +1762,146 @@ async function generatePdf(b){
       doc.setFillColor(...gold);
       doc.triangle(lineToX-6,ly-11, lineToX-6,ly-1, lineToX+3,ly-6, 'F');
     }
-    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...inkSoft);
-    doc.text(String(leg.from), px+16, ly+12, {maxWidth: panelW/2-20});
-    doc.text(String(leg.to), tX, ly+12, {align:'right', maxWidth: panelW/2-20});
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...inkSoft);
+    doc.text(String(leg.from), px+16, ly+11, {maxWidth: panelW/2-20});
+    doc.text(String(leg.to), tX, ly+11, {align:'right', maxWidth: panelW/2-20});
+    if (leg.originAirportName || leg.destinationAirportName){
+      doc.setFontSize(6.5);
+      const origLabel = (leg.originAirportName||'').toUpperCase() + (leg.originTerminal?` (T${leg.originTerminal})`:'');
+      const destLabel = (leg.destinationAirportName||'').toUpperCase() + (leg.destinationTerminal?` (T${leg.destinationTerminal})`:'');
+      if (origLabel) doc.text(origLabel, px+16, ly+21, {maxWidth: panelW/2-20});
+      if (destLabel) doc.text(destLabel, tX, ly+21, {align:'right', maxWidth: panelW/2-20});
+    }
 
-    // date / statut
-    ly += 30;
+    ly += 34;
     doc.setDrawColor(...line); doc.setLineWidth(0.7);
     doc.line(px+16, ly, px+panelW-16, ly);
     ly += 16;
-    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...inkSoft);
-    doc.text(t('w5_date').toUpperCase(), px+16, ly);
-    doc.text(t('status').toUpperCase(), px+panelW/2+4, ly);
-    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(...ink);
-    doc.text(String(leg.date), px+16, ly+13);
-    doc.text(t('status_'+leg.status), px+panelW/2+4, ly+13);
+    const col3W = (panelW-32)/3;
+    const dateCol = [px+16, px+16+col3W, px+16+col3W*2];
+    doc.setFont('helvetica','bold'); doc.setFontSize(6.8); doc.setTextColor(...inkSoft);
+    drawCalendar(dateCol[0]+6, ly-3, 8, gold); doc.text(t('w5_date').toUpperCase(), dateCol[0]+15, ly);
+    drawClock(dateCol[1]+6, ly-3, 8, gold); doc.text((LANG==='fr'?'DÉPART':'DEPART'), dateCol[1]+15, ly);
+    drawClock(dateCol[2]+6, ly-3, 8, gold); doc.text((LANG==='fr'?'ARRIVÉE':'ARRIVAL'), dateCol[2]+15, ly);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...ink);
+    doc.text(String(leg.date), dateCol[0]+15, ly+13);
+    doc.text(leg.depTime ? formatTime(leg.depTime) : '—', dateCol[1]+15, ly+13);
+    doc.text(leg.arrTime ? formatTime(leg.arrTime) : '—', dateCol[2]+15, ly+13);
 
-    // franchise bagages (données réelles Duffel)
-    if (leg.checkedBags != null || leg.cabinBags != null) {
-      ly += 30;
+    ly += 28;
+    if (leg.aircraft || leg.durationMin!=null){
       doc.setDrawColor(...line); doc.setLineWidth(0.7);
       doc.line(px+16, ly, px+panelW-16, ly);
-      ly += 18;
-      const cabinN = leg.cabinBags || 0, checkedN = leg.checkedBags || 0;
-      drawBagIcon(px+22, ly-3, cabinN ? gold : line);
-      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...(cabinN ? ink : inkSoft));
-      doc.text(cabinN ? `${cabinN} ${LANG==='fr'?'bagage cabine':'cabin bag'}${cabinN>1?'s':''}` : (LANG==='fr'?'Cabine non incluse':'No cabin bag'), px+34, ly);
-      const bx2 = px+panelW/2+8;
-      drawBagIcon(bx2, ly-3, checkedN ? gold : line);
-      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...(checkedN ? ink : inkSoft));
-      doc.text(checkedN ? `${checkedN} ${LANG==='fr'?'bagage en soute':'checked bag'}${checkedN>1?'s':''}` : (LANG==='fr'?'Soute non incluse':'No checked bag'), bx2+12, ly);
+      ly += 16;
+      doc.setFont('helvetica','bold'); doc.setFontSize(6.8); doc.setTextColor(...inkSoft);
+      doc.text((LANG==='fr'?'APPAREIL':'AIRCRAFT'), px+16, ly);
+      doc.text((LANG==='fr'?'DURÉE DU VOL':'FLIGHT TIME'), px+panelW/2+4, ly);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...ink);
+      doc.text(leg.aircraft || '—', px+16, ly+12, {maxWidth: panelW/2-24});
+      doc.text(leg.durationMin!=null ? formatDuration(leg.durationMin) : '—', px+panelW/2+4, ly+12);
     }
+
+    drawSkyline(px+14, y+panelH-12, panelW-28, [220,225,222]);
   });
 
   y += panelH + 18;
 
-  /* ---- Informations importantes ---- */
-  const infoItems = LANG==='fr' ? [
-    'Présentez-vous à l\'aéroport au moins 3 heures avant le départ pour un vol international.',
-    'Munissez-vous d\'une pièce d\'identité ou d\'un passeport valide, correspondant au nom du passager.',
-    'Vérifiez les horaires, le terminal et le statut du vol avant votre déplacement.',
-    `Une confirmation a été envoyée à : ${b.email || '—'} (pensez à vérifier vos courriers indésirables).`,
-  ] : [
-    'Arrive at the airport at least 3 hours before departure for an international flight.',
-    'Bring a valid ID or passport matching the passenger name.',
-    'Double-check flight times, terminal and status before you travel.',
-    `A confirmation was sent to: ${b.email || '—'} (check your spam folder too).`,
-  ];
-  const infoBarH = 24;
-  const infoLineH = 26;
-  const infoH = infoBarH + 14 + infoItems.length*infoLineH + 10;
+  /* ================= BAGAGES INCLUS + INFORMATIONS IMPORTANTES ================= */
+  const boxH = 130;
+  const boxGap = 16;
+  const boxW = (PAGE_W-2*MARGIN-boxGap)/2;
+
+  const renderBagRow = (bx, by, cabinN, checkedN) => {
+    drawBagIcon(bx+10, by, cabinN?gold:line);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...(cabinN?ink:inkSoft));
+    doc.text(cabinN ? `${cabinN} ${LANG==='fr'?'bagage cabine':'cabin bag'}${cabinN>1?'s':''}` : (LANG==='fr'?'Cabine non incluse':'No cabin bag'), bx+22, by+3, {maxWidth: boxW/2-30});
+    const bx2 = bx + boxW/2 - 6;
+    drawBagIcon(bx2+10, by, checkedN?gold:line);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...(checkedN?ink:inkSoft));
+    doc.text(checkedN ? `${checkedN} ${LANG==='fr'?'bagage en soute':'checked bag'}${checkedN>1?'s':''}` : (LANG==='fr'?'Soute non incluse':'No checked bag'), bx2+22, by+3, {maxWidth: boxW/2-30});
+  };
+
+  const bagX = MARGIN;
   doc.setDrawColor(...line); doc.setLineWidth(1);
-  doc.roundedRect(MARGIN, y, PAGE_W-2*MARGIN, infoH, 8, 8, 'S');
+  doc.roundedRect(bagX, y, boxW, boxH, 8, 8, 'S');
+  doc.setFillColor(...petrol);
+  doc.roundedRect(bagX, y, boxW, 24, 8, 8, 'F');
+  doc.rect(bagX, y+16, boxW, 8, 'F');
+  drawBagIcon(bagX+16, y+13, [255,255,255]);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(255,255,255);
+  doc.text((LANG==='fr'?'BAGAGES INCLUS':'INCLUDED BAGGAGE'), bagX+28, y+16);
+
+  if (hasReturn) {
+    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...inkSoft);
+    doc.text((LANG==='fr'?'VOL ALLER':'OUTBOUND'), bagX+16, y+42);
+    renderBagRow(bagX+16, y+58, b.cabinBags||0, b.checkedBags||0);
+    doc.text((LANG==='fr'?'VOL RETOUR':'RETURN'), bagX+16, y+82);
+    renderBagRow(bagX+16, y+98, b.returnCabinBags||0, b.returnCheckedBags||0);
+  } else {
+    renderBagRow(bagX+16, y+64, b.cabinBags||0, b.checkedBags||0);
+  }
+
+  const infoX = MARGIN+boxW+boxGap;
+  doc.setDrawColor(...line); doc.setLineWidth(1);
+  doc.roundedRect(infoX, y, boxW, boxH, 8, 8, 'S');
   doc.setFillColor(...gold);
-  doc.roundedRect(MARGIN, y, PAGE_W-2*MARGIN, infoBarH, 8, 8, 'F');
-  doc.rect(MARGIN, y+infoBarH-8, PAGE_W-2*MARGIN, 8, 'F');
-  doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(...petrol);
-  doc.text((LANG==='fr'?'INFORMATIONS IMPORTANTES':'IMPORTANT INFORMATION'), MARGIN+14, y+16);
-  let infoY = y+infoBarH+22;
+  doc.roundedRect(infoX, y, boxW, 24, 8, 8, 'F');
+  doc.rect(infoX, y+16, boxW, 8, 'F');
+  drawInfoCircle(infoX+16, y+13, 13, petrol);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...petrol);
+  doc.text((LANG==='fr'?'INFORMATIONS IMPORTANTES':'IMPORTANT INFORMATION'), infoX+28, y+16);
+
+  const infoItems = LANG==='fr' ? [
+    "Présentez-vous à l'aéroport au moins 3h avant le départ.",
+    "Pièce d'identité ou passeport valide requis.",
+    'Vérifiez horaires et terminal avant le voyage.',
+    `Confirmation envoyée à : ${b.email || '—'}`,
+  ] : [
+    'Arrive at least 3h before departure.',
+    'Valid ID or passport required.',
+    'Double-check times and terminal before travel.',
+    `Confirmation sent to: ${b.email || '—'}`,
+  ];
+  let infoY = y+40;
   infoItems.forEach(item=>{
-    drawCheck(MARGIN+22, infoY-4, gold);
-    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...ink);
-    doc.text(item, MARGIN+36, infoY, {maxWidth: PAGE_W-2*MARGIN-50});
-    infoY += infoLineH;
+    drawCheck(infoX+20, infoY-3, gold);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.8); doc.setTextColor(...ink);
+    doc.text(item, infoX+32, infoY, {maxWidth: boxW-46});
+    infoY += 24;
   });
 
-  /* ---- Pied de page ---- */
-  const footY = PAGE_H-56;
+  y += boxH + 16;
+
+  /* ================= PIED DE PAGE ================= */
+  const footTop = PAGE_H - 74;
+  doc.setDrawColor(...gold); doc.setLineWidth(1);
+  doc.line(MARGIN, footTop, PAGE_W-MARGIN, footTop);
+
+  const services = LANG==='fr' ? [
+    [(LANG==='fr'?'Billetterie avion':'Flight tickets'), drawTicket],
+    [(LANG==='fr'?'Séjours & vacances':'Trips & vacations'), drawBagIcon],
+    [(LANG==='fr'?'Tourisme & excursions':'Tourism & excursions'), drawGlobe],
+    [(LANG==='fr'?'Visa & assistance':'Visa & assistance'), drawPin],
+    [(LANG==='fr'?'Service client 24/7':'24/7 customer service'), drawPhone],
+  ] : [
+    ['Flight tickets', drawTicket], ['Trips & vacations', drawBagIcon],
+    ['Tourism & excursions', drawGlobe], ['Visa & assistance', drawPin],
+    ['24/7 customer service', drawPhone],
+  ];
+  const svcW = (PAGE_W-2*MARGIN)/services.length;
+  services.forEach(([label, icon], i)=>{
+    const cx = MARGIN + svcW*i + svcW/2;
+    icon(cx, footTop+20, 13, gold);
+    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(...petrol);
+    doc.text(label.toUpperCase(), cx, footTop+36, {align:'center', maxWidth: svcW-8});
+  });
+
   doc.setFillColor(...petrol);
-  doc.rect(0, footY, PAGE_W, 56, 'F');
-  doc.setDrawColor(...gold); doc.setLineWidth(2);
-  doc.line(0, footY, PAGE_W, footY);
-  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(255,255,255);
-  doc.text('SkyLink Voyages', MARGIN, footY+24);
-  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...goldLite);
-  doc.text([SKYLINK_CONTACT.address.join(', '), SKYLINK_CONTACT.phones.join(' / '), SKYLINK_CONTACT.email].filter(Boolean).join('  —  '), MARGIN, footY+38, {maxWidth: 340});
-  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(255,255,255);
-  doc.text(LANG==='fr' ? 'Document généré électroniquement' : 'Electronically generated document', PAGE_W-MARGIN, footY+24, {align:'right'});
-  doc.text(fmtDateTime(Date.now()), PAGE_W-MARGIN, footY+38, {align:'right'});
+  doc.rect(0, PAGE_H-20, PAGE_W, 20, 'F');
+  drawPlaneTri(MARGIN+8, PAGE_H-10, 9, gold);
+  doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(255,255,255);
+  doc.text((LANG==='fr'?'Votre partenaire de confiance pour tous vos voyages':'Your trusted partner for all your travels'), PAGE_W/2, PAGE_H-7, {align:'center'});
+  drawPlaneTri(PAGE_W-MARGIN-8, PAGE_H-10, 9, gold);
 
   doc.save(`skylink-reservation-${b.pnr}${hasReturn?'-'+b.returnPnr:''}.pdf`);
   toast(t('toast_pdf'));
